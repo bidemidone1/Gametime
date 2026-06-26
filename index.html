@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kid Friendly Space Shooter</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0b0c10;
+            color: white;
+            font-family: 'Comic Sans MS', 'Chalkboard SE', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+        h1 {
+            color: #66fcf1;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+        canvas {
+            background-color: #1f2833;
+            border: 6px solid #45a29e;
+            border-radius: 15px;
+            box-shadow: 0 0 20px #66fcf1;
+        }
+        #instructions {
+            margin-top: 15px;
+            font-size: 20px;
+            color: #c5c6c7;
+            text-align: center;
+        }
+        .highlight {
+            color: #ffc107;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🚀 Star Defender! 🚀</h1>
+    <canvas id="gameCanvas" width="500" height="600"></canvas>
+    <div id="instructions">
+        Use <span class="highlight">Arrow Keys (◀ ▶)</span> to move.<br>
+        Press <span class="highlight">Spacebar</span> to shoot stars! 🌟
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game State Variables
+        let score = 0;
+        let gameOver = false;
+        let frameCount = 0;
+
+        // Input Handling
+        const keys = {
+            ArrowLeft: false,
+            ArrowRight: false,
+            Space: false
+        };
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'ArrowLeft') keys.ArrowLeft = true;
+            if (e.code === 'ArrowRight') keys.ArrowRight = true;
+            if (e.code === 'Space') keys.Space = true;
+            
+            // Prevent spacebar from scrolling the page
+            if(e.code === 'Space') e.preventDefault();
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.code === 'ArrowLeft') keys.ArrowLeft = false;
+            if (e.code === 'ArrowRight') keys.ArrowRight = false;
+            if (e.code === 'Space') keys.Space = false;
+        });
+
+        // Click to restart if game over
+        canvas.addEventListener('click', () => {
+            if (gameOver) resetGame();
+        });
+
+        // Player Object
+        const player = {
+            x: canvas.width / 2,
+            y: canvas.height - 50,
+            size: 40,
+            speed: 5,
+            cooldown: 0,
+            draw() {
+                ctx.font = `${this.size}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('🚀', this.x, this.y);
+            },
+            update() {
+                if (keys.ArrowLeft && this.x > this.size / 2) this.x -= this.speed;
+                if (keys.ArrowRight && this.x < canvas.width - this.size / 2) this.x += this.speed;
+                
+                // Shooting mechanism with cooldown so kids can't spam too fast
+                if (keys.Space && this.cooldown <= 0) {
+                    stars.push(new Star(this.x, this.y - 20));
+                    this.cooldown = 15; // Wait 15 frames before next shot
+                }
+                if (this.cooldown > 0) this.cooldown--;
+            }
+        };
+
+        // Arrays to hold moving objects
+        let stars = [];
+        let aliens = [];
+        let backgroundDots = [];
+
+        // Generate background space dots
+        for(let i = 0; i < 50; i++) {
+            backgroundDots.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                radius: Math.random() * 2,
+                speed: Math.random() * 1 + 0.5
+            });
+        }
+
+        // Star (Projectile) Class
+        class Star {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.size = 20;
+                this.speed = 7;
+            }
+            draw() {
+                ctx.font = `${this.size}px Arial`;
+                ctx.fillText('⭐', this.x, this.y);
+            }
+            update() {
+                this.y -= this.speed;
+            }
+        }
+
+        // Alien (Enemy) Class
+        class Alien {
+            constructor() {
+                this.size = 35;
+                this.x = Math.random() * (canvas.width - this.size * 2) + this.size;
+                this.y = -30;
+                this.speed = Math.random() * 2 + 1.5; // Slow, kid-friendly speed
+            }
+            draw() {
+                ctx.font = `${this.size}px Arial`;
+                ctx.fillText('👾', this.x, this.y);
+            }
+            update() {
+                this.y += this.speed;
+            }
+        }
+
+        // Collision Detection (Distance based)
+        function checkCollision(obj1, obj2, distanceThreshold) {
+            const dx = obj1.x - obj2.x;
+            const dy = obj1.y - obj2.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            return distance < distanceThreshold;
+        }
+
+        // Reset the game
+        function resetGame() {
+            score = 0;
+            gameOver = false;
+            stars = [];
+            aliens = [];
+            player.x = canvas.width / 2;
+            gameLoop();
+        }
+
+        // Main Game Loop
+        function gameLoop() {
+            if (gameOver) return;
+
+            // Clear the canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw and update moving background
+            ctx.fillStyle = 'white';
+            backgroundDots.forEach(dot => {
+                ctx.beginPath();
+                ctx.arc(dot.x, dot.y, dot.radius, 0, Math.PI * 2);
+                ctx.fill();
+                dot.y += dot.speed;
+                if(dot.y > canvas.height) {
+                    dot.y = 0;
+                    dot.x = Math.random() * canvas.width;
+                }
+            });
+
+            // Update and draw player
+            player.update();
+            player.draw();
+
+            // Spawn Aliens slowly (every 60 frames roughly 1 second)
+            frameCount++;
+            if (frameCount % 60 === 0) {
+                aliens.push(new Alien());
+            }
+
+            // Update and draw stars (projectiles)
+            for (let i = stars.length - 1; i >= 0; i--) {
+                stars[i].update();
+                stars[i].draw();
+
+                // Remove if off screen
+                if (stars[i].y < -20) {
+                    stars.splice(i, 1);
+                }
+            }
+
+            // Update and draw aliens
+            for (let i = aliens.length - 1; i >= 0; i--) {
+                aliens[i].update();
+                aliens[i].draw();
+
+                // Check collision with player
+                if (checkCollision(player, aliens[i], 30)) {
+                    endGame("Oh no! The alien bumped you!");
+                    return;
+                }
+
+                // Check collision with stars
+                let alienRemoved = false;
+                for (let j = stars.length - 1; j >= 0; j--) {
+                    if (checkCollision(aliens[i], stars[j], 25)) {
+                        score += 10;
+                        stars.splice(j, 1); // Remove star
+                        aliens.splice(i, 1); // Remove alien
+                        alienRemoved = true;
+                        break;
+                    }
+                }
+
+                // Check if alien passed the screen
+                if (!alienRemoved && aliens[i].y > canvas.height + 20) {
+                    endGame("Oops! An alien snuck past!");
+                    return;
+                }
+            }
+
+            // Draw Score
+            ctx.fillStyle = '#66fcf1';
+            ctx.font = '24px "Comic Sans MS"';
+            ctx.textAlign = 'left';
+            ctx.fillText(`Score: ${score}`, 20, 30);
+
+            // Loop
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Game Over Screen
+        function endGame(message) {
+            gameOver = true;
+            
+            // Semi-transparent overlay
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Game over text
+            ctx.fillStyle = 'white';
+            ctx.textAlign = 'center';
+            
+            ctx.font = 'bold 40px "Comic Sans MS"';
+            ctx.fillText("Game Over!", canvas.width / 2, canvas.height / 2 - 40);
+            
+            ctx.fillStyle = '#ffc107';
+            ctx.font = '20px "Comic Sans MS"';
+            ctx.fillText(message, canvas.width / 2, canvas.height / 2);
+            
+            ctx.fillStyle = 'white';
+            ctx.font = '24px "Comic Sans MS"';
+            ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 50);
+            
+            ctx.fillStyle = '#66fcf1';
+            ctx.font = '18px "Comic Sans MS"';
+            ctx.fillText("Click the game box to play again! 🎮", canvas.width / 2, canvas.height / 2 + 100);
+        }
+
+        // Start the game
+        gameLoop();
+    </script>
+</body>
+</html>
