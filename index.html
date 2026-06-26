@@ -3,356 +3,549 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Kid Friendly Space Shooter - Mobile Edition</title>
+    <title>Neon Overdrive - Premium Arcade</title>
     <style>
-        body {
+        :root {
+            --neon-cyan: #00f3ff;
+            --neon-pink: #ff007f;
+            --neon-purple: #9d00ff;
+            --dark-bg: #06060c;
+        }
+        * {
+            box-sizing: border-box;
             margin: 0;
             padding: 0;
-            background-color: #0b0c10;
-            color: white;
-            font-family: 'Comic Sans MS', 'Chalkboard SE', sans-serif;
+        }
+        body {
+            background-color: var(--dark-bg);
+            color: #ffffff;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: flex-start;
+            justify-content: center;
             min-height: 100vh;
             overflow: hidden;
-            /* Prevents long-press menus and selecting text on mobile */
             user-select: none;
             -webkit-user-select: none;
-            touch-action: none; 
+            touch-action: none;
         }
-        h1 {
-            color: #66fcf1;
-            margin: 10px 0 5px 0;
-            font-size: 24px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-        }
-        /* Responsive Canvas scaling for mobile screens */
-        canvas {
-            background-color: #1f2833;
-            border: 4px solid #45a29e;
-            border-radius: 12px;
-            box-shadow: 0 0 15px #66fcf1;
-            max-width: 92vw;
-            max-height: 55vh;
-            width: 100%;
-            height: auto;
-            aspect-ratio: 500 / 600;
-        }
-        /* Mobile Gamepad Touch Controls Layout */
-        #mobileControls {
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            max-width: 540px;
+            max-height: 960px;
             display: flex;
-            width: 95vw;
-            max-width: 500px;
-            justify-content: space-between;
-            margin-top: 15px;
-            padding-bottom: 20px;
+            flex-direction: column;
+            background: radial-gradient(circle at center, #111126 0%, #06060c 100%);
+            box-shadow: 0 0 40px rgba(0, 243, 255, 0.15);
         }
-        .control-btn {
-            background-color: #45a29e;
-            color: white;
-            border: 3px solid #66fcf1;
-            border-radius: 15px;
-            font-size: 32px;
-            font-weight: bold;
-            padding: 15px 0;
-            text-align: center;
-            box-shadow: 0 6px #1f2833;
-            touch-action: manipulation;
-            transition: all 0.05s ease;
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
         }
-        /* Visual feedback when kid taps the buttons */
-        .control-btn:active {
-            background-color: #66fcf1;
-            color: #0b0c10;
-            transform: translateY(4px);
-            box-shadow: 0 2px #1f2833;
+        /* Sleek minimalist HUD overlays */
+        .hud-element {
+            position: absolute;
+            pointer-events: none;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 2px;
         }
-        #btnLeft, #btnRight {
-            width: 28%;
-        }
-        #btnFire {
-            width: 38%;
-            background-color: #ffc107;
-            border-color: #ffe082;
+        #score-display {
+            top: 25px;
+            left: 25px;
             font-size: 24px;
+            color: var(--neon-cyan);
+            text-shadow: 0 0 10px rgba(0, 243, 255, 0.5);
         }
-        #btnFire:active {
-            background-color: #ffe082;
+        #hint-display {
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.4);
+            text-align: center;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 0.8; }
         }
     </style>
 </head>
 <body>
 
-    <h1>🚀 Star Defender! 🚀</h1>
-    <canvas id="gameCanvas" width="500" height="600"></canvas>
-    
-    <div id="mobileControls">
-        <button id="btnLeft" class="control-btn">◀</button>
-        <button id="btnFire" class="control-btn">🌟 FIRE</button>
-        <button id="btnRight" class="control-btn">▶</button>
+    <div id="game-container">
+        <div id="score-display" class="hud-element">SCORE: 0</div>
+        <div id="hint-display" class="hud-element">Drag / Swipe anywhere to fly • Autofire Active</div>
+        <canvas id="arcadeCanvas"></canvas>
     </div>
 
     <script>
-        const canvas = document.getElementById('gameCanvas');
+        const canvas = document.getElementById('arcadeCanvas');
         const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('score-display');
 
-        // Game State Variables
+        // Force high-resolution internal canvas dimensions for crisp graphics
+        const GAME_WIDTH = 450;
+        const GAME_HEIGHT = 800;
+        canvas.width = GAME_WIDTH;
+        canvas.height = GAME_HEIGHT;
+
+        // Global Game States
         let score = 0;
         let gameOver = false;
+        let gameActive = false;
         let frameCount = 0;
+        let screenShake = 0;
 
-        // Input Tracking States
-        const keys = {
-            ArrowLeft: false,
-            ArrowRight: false,
-            Space: false
-        };
-
-        // --- DESKTOP KEYBOARD CONTROLS ---
-        window.addEventListener('keydown', (e) => {
-            if (e.code === 'ArrowLeft') keys.ArrowLeft = true;
-            if (e.code === 'ArrowRight') keys.ArrowRight = true;
-            if (e.code === 'Space') keys.Space = true;
-            if (e.code === 'Space') e.preventDefault();
-        });
-
-        window.addEventListener('keyup', (e) => {
-            if (e.code === 'ArrowLeft') keys.ArrowLeft = false;
-            if (e.code === 'ArrowRight') keys.ArrowRight = false;
-            if (e.code === 'Space') keys.Space = false;
-        });
-
-        // --- MOBILE TOUCH CONTROLS ---
-        const btnLeft = document.getElementById('btnLeft');
-        const btnRight = document.getElementById('btnRight');
-        const btnFire = document.getElementById('btnFire');
-
-        // Left Button Events
-        btnLeft.addEventListener('touchstart', (e) => { e.preventDefault(); keys.ArrowLeft = true; });
-        btnLeft.addEventListener('touchend', (e) => { e.preventDefault(); keys.ArrowLeft = false; });
-        
-        // Right Button Events
-        btnRight.addEventListener('touchstart', (e) => { e.preventDefault(); keys.ArrowRight = true; });
-        btnRight.addEventListener('touchend', (e) => { e.preventDefault(); keys.ArrowRight = false; });
-
-        // Fire Button Events
-        btnFire.addEventListener('touchstart', (e) => { e.preventDefault(); keys.Space = true; });
-        btnFire.addEventListener('touchend', (e) => { e.preventDefault(); keys.Space = false; });
-
-        // Touch Canvas to Restart when Game Over
-        canvas.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            if (gameOver) resetGame();
-        });
-        canvas.addEventListener('click', () => {
-            if (gameOver) resetGame();
-        });
-
-        // Player Object Setup
-        const player = {
-            x: canvas.width / 2,
-            y: canvas.height - 50,
-            size: 40,
-            speed: 6, // Slightly faster movement for snappy mobile feel
-            cooldown: 0,
-            draw() {
-                ctx.font = `${this.size}px Arial`;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText('🚀', this.x, this.y);
-            },
-            update() {
-                if (keys.ArrowLeft && this.x > this.size / 2) this.x -= this.speed;
-                if (keys.ArrowRight && this.x < canvas.width - this.size / 2) this.x += this.speed;
-                
-                // Continuous shooting if button is held down, with a friendly cooldown rate
-                if (keys.Space && this.cooldown <= 0) {
-                    stars.push(new Star(this.x, this.y - 20));
-                    this.cooldown = 12; 
-                }
-                if (this.cooldown > 0) this.cooldown--;
-            }
-        };
-
-        // Arrays to manage entities
+        // Entities arrays
         let stars = [];
-        let aliens = [];
-        let backgroundDots = [];
+        let lasers = [];
+        let enemies = [];
+        let particles = [];
+        let floatingTexts = [];
 
-        // Build Twinkling Background
-        for(let i = 0; i < 40; i++) {
-            backgroundDots.push({
-                x: Math.random() * canvas.width,
-                y: Math.random() * canvas.height,
-                radius: Math.random() * 2,
-                speed: Math.random() * 1 + 0.5
+        // Engine / Tuning Parameters
+        const CONFIG = {
+            playerSpeedLerp: 0.18, // Smoothness of finger tracking (lower = floatier, higher = sharper)
+            laserSpeed: 14,
+            fireRate: 9,          // Auto-fires every X frames
+            enemySpawnRate: 50,    // Spawns enemy every X frames
+            baseEnemySpeed: 2.5
+        };
+
+        // Initialize Background Parallax Starfield
+        for (let i = 0; i < 60; i++) {
+            stars.push({
+                x: Math.random() * GAME_WIDTH,
+                y: Math.random() * GAME_HEIGHT,
+                size: Math.random() * 2 + 0.5,
+                speed: Math.random() * 2 + 0.5,
+                color: Math.random() > 0.5 ? '#00f3ff' : '#ff007f'
             });
         }
 
-        // Projectile Class (Star Power-ups)
-        class Star {
-            constructor(x, y) {
+        // Premium Particle System Engine
+        class Particle {
+            constructor(x, y, color) {
                 this.x = x;
                 this.y = y;
-                this.size = 22;
-                this.speed = 8;
-            }
-            draw() {
-                ctx.font = `${this.size}px Arial`;
-                ctx.fillText('⭐', this.x, this.y);
+                this.color = color;
+                this.size = Math.random() * 3 + 2;
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 5 + 2;
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+                this.alpha = 1;
+                this.decay = Math.random() * 0.02 + 0.02;
             }
             update() {
-                this.y -= this.speed;
+                this.x += this.vx;
+                this.y += this.vy;
+                this.vx *= 0.98; // Drag friction
+                this.vy *= 0.98;
+                this.alpha -= this.decay;
+            }
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.alpha;
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = this.color;
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x - this.size/2, this.y - this.size/2, this.size, this.size);
+                ctx.restore();
             }
         }
 
-        // Enemy Class (Silly Space Aliens)
-        class Alien {
-            constructor() {
-                this.size = 35;
-                this.x = Math.random() * (canvas.width - this.size * 2) + this.size;
-                this.y = -30;
-                // Perfect slower speed adjustments for kids playing on touch screens
-                this.speed = Math.random() * 1.5 + 1.5; 
+        // Floating Damage/Score Text Numbers
+        class FloatingText {
+            constructor(x, y, text, color) {
+                this.x = x;
+                this.y = y;
+                this.text = text;
+                this.color = color;
+                this.alpha = 1;
+                this.vy = -1.5;
+            }
+            update() {
+                this.y += this.vy;
+                this.alpha -= 0.025;
             }
             draw() {
-                ctx.font = `${this.size}px Arial`;
-                ctx.fillText('👾', this.x, this.y);
+                ctx.save();
+                ctx.globalAlpha = this.alpha;
+                ctx.font = 'bold 16px system-ui';
+                ctx.fillStyle = this.color;
+                ctx.textAlign = 'center';
+                ctx.fillText(this.text, this.x, this.y);
+                ctx.restore();
+            }
+        }
+
+        // Player Object Config
+        const player = {
+            x: GAME_WIDTH / 2,
+            y: GAME_HEIGHT - 120,
+            targetX: GAME_WIDTH / 2,
+            targetY: GAME_HEIGHT - 120,
+            width: 44,
+            height: 48,
+            tilt: 0,
+            
+            update() {
+                // Smoothly slide ship position toward touch targets (Lerp Math)
+                const dx = this.targetX - this.x;
+                const dy = this.targetY - this.y;
+                
+                this.x += dx * CONFIG.playerSpeedLerp;
+                this.y += dy * CONFIG.playerSpeedLerp;
+
+                // Subtle dynamic tilting animation based on sliding speed
+                this.tilt = dx * 0.04;
+                if(this.tilt > 0.4) this.tilt = 0.4;
+                if(this.tilt < -0.4) this.tilt = -0.4;
+
+                // Enforce safety barriers
+                if (this.x < this.width) this.x = this.width;
+                if (this.x > GAME_WIDTH - this.width) this.x = GAME_WIDTH - this.width;
+                if (this.y < 200) this.y = 200; // Limit how high they can drag up
+                if (this.y > GAME_HEIGHT - 60) this.y = GAME_HEIGHT - 60;
+
+                // PREMIUM AUTOFIRE TRIGGER ENGINE
+                if (gameActive && !gameOver && frameCount % CONFIG.fireRate === 0) {
+                    // Twin Barrels Setup
+                    lasers.push({ x: this.x - 14, y: this.y - 15 });
+                    lasers.push({ x: this.x + 14, y: this.y - 15 });
+                }
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.tilt);
+
+                // Glow Engine FX
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = varColor('--neon-cyan');
+
+                // Engine Trail Flames
+                ctx.fillStyle = frameCount % 2 === 0 ? 'rgba(255,0,127,0.8)' : 'rgba(0,243,255,0.8)';
+                ctx.beginPath();
+                ctx.moveTo(-6, 20);
+                ctx.lineTo(0, 32 + Math.random()*8);
+                ctx.lineTo(6, 20);
+                ctx.fill();
+
+                // Sleek Premium Vector Spacefighter Chassis Art
+                ctx.fillStyle = '#111122';
+                ctx.strokeStyle = varColor('--neon-cyan');
+                ctx.lineWidth = 3;
+                
+                ctx.beginPath();
+                ctx.moveTo(0, -24);        // Nose cone
+                ctx.lineTo(16, 12);        // Right wingtip
+                ctx.lineTo(6, 18);         // Right aft bulkhead
+                ctx.lineTo(-6, 18);        // Left aft bulkhead
+                ctx.lineTo(-16, 12);       // Left wingtip
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                // Canopy Glass Accent
+                ctx.fillStyle = varColor('--neon-pink');
+                ctx.beginPath();
+                ctx.moveTo(0, -10);
+                ctx.lineTo(5, 5);
+                ctx.lineTo(-5, 5);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.restore();
+            }
+        };
+
+        // Enemy Drone Class Engine
+        class Enemy {
+            constructor() {
+                this.width = 36;
+                this.height = 32;
+                this.x = Math.random() * (GAME_WIDTH - 80) + 40;
+                this.y = -40;
+                this.speed = CONFIG.baseEnemySpeed + Math.random() * 2;
+                this.pulseFactor = Math.random() * 10;
             }
             update() {
                 this.y += this.speed;
+                // Elegant soft wave floating path mechanics
+                this.x += Math.sin((frameCount + this.pulseFactor) * 0.04) * 0.8;
+            }
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                
+                ctx.shadowBlur = 12;
+                ctx.shadowColor = varColor('--neon-pink');
+                ctx.fillStyle = '#181224';
+                ctx.strokeStyle = varColor('--neon-pink');
+                ctx.lineWidth = 2.5;
+
+                // Modern Geometric Aggressive Polygon Grid Shapes
+                ctx.beginPath();
+                ctx.moveTo(0, 16);          // Spike nose pointing down
+                ctx.lineTo(18, -12);        // Wing right
+                ctx.lineTo(8, -16);         // Inner right intake
+                ctx.lineTo(-8, -16);        // Inner left intake
+                ctx.lineTo(-18, -12);       // Wing left
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                // Core glowing eye reactor matrix
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(0, -2, 4, 0, Math.PI*2);
+                ctx.fill();
+
+                ctx.restore();
             }
         }
 
-        // Circular Collision Math Helper
-        function checkCollision(obj1, obj2, distanceThreshold) {
-            const dx = obj1.x - obj2.x;
-            const dy = obj1.y - obj2.y;
-            return Math.sqrt(dx * dx + dy * dy) < distanceThreshold;
+        // Unified Root Hex/CSS Utility Reader
+        function varColor(name) {
+            return name === '--neon-cyan' ? '#00f3ff' : '#ff007f';
         }
 
-        // Refresh/Restart state cleaner
+        // Core Coordinate Mapper for Touch & Drags
+        function updateTargetFromTouch(e) {
+            if (gameOver) return;
+            if (!gameActive) gameActive = true;
+
+            const rect = canvas.getBoundingClientRect();
+            const touch = e.touches[0];
+            
+            // Scaled dynamic mapping to isolate exact finger positioning
+            const touchX = (touch.clientX - rect.left) * (GAME_WIDTH / rect.width);
+            const touchY = (touch.clientY - rect.top) * (GAME_HEIGHT / rect.height);
+            
+            // Set dynamic positional offsets
+            player.targetX = touchX;
+            player.targetY = touchY - 40; // Safely offsets the player's view context above the finger line
+        }
+
+        // Event Control Rigging
+        window.addEventListener('touchstart', (e) => {
+            if(gameOver) {
+                resetGame();
+                e.preventDefault();
+                return;
+            }
+            updateTargetFromTouch(e);
+            e.preventDefault();
+        }, { passive: false });
+
+        window.addEventListener('touchmove', (e) => {
+            updateTargetFromTouch(e);
+            e.preventDefault();
+        }, { passive: false });
+
+        // Desktop Fallback Dev Listener Mouse Engine
+        canvas.addEventListener('mousemove', (e) => {
+            if (!gameActive || gameOver) return;
+            const rect = canvas.getBoundingClientRect();
+            player.targetX = (e.clientX - rect.left) * (GAME_WIDTH / rect.width);
+            player.targetY = (e.clientY - rect.top) * (GAME_HEIGHT / rect.height) - 40;
+        });
+        canvas.addEventListener('click', () => {
+            if (!gameActive) gameActive = true;
+            if (gameOver) resetGame();
+        });
+
+        function createExplosion(x, y, color) {
+            screenShake = 12; // Trigger UI bounce vibration context
+            for (let i = 0; i < 15; i++) {
+                particles.push(new Particle(x, y, color));
+            }
+        }
+
         function resetGame() {
             score = 0;
+            scoreDisplay.innerText = "SCORE: 0";
             gameOver = false;
-            stars = [];
-            aliens = [];
-            player.x = canvas.width / 2;
-            // Clear keys in case touch got stuck on reset
-            keys.ArrowLeft = false;
-            keys.ArrowRight = false;
-            keys.Space = false;
-            gameLoop();
+            gameActive = true;
+            lasers = [];
+            enemies = [];
+            particles = [];
+            floatingTexts = [];
+            player.x = GAME_WIDTH / 2;
+            player.y = GAME_HEIGHT - 120;
+            player.targetX = GAME_WIDTH / 2;
+            player.targetY = GAME_HEIGHT - 120;
+            frameCount = 0;
         }
 
-        // Engine Loop Function
-        function gameLoop() {
-            if (gameOver) return;
+        // Primary High-Performance Render Loop Architecture
+        function loop() {
+            ctx.save();
+            
+            // Screen Shake Transform Application Matrix
+            if (screenShake > 0) {
+                const dx = (Math.random() - 0.5) * screenShake;
+                const dy = (Math.random() - 0.5) * screenShake;
+                ctx.translate(dx, dy);
+                screenShake *= 0.85; // Natural vibration decay envelope
+                if(screenShake < 0.5) screenShake = 0;
+            }
 
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-            // Draw Background Stars
-            ctx.fillStyle = '#ffffff';
-            backgroundDots.forEach(dot => {
-                ctx.beginPath();
-                ctx.arc(dot.x, dot.y, dot.radius, 0, Math.PI * 2);
-                ctx.fill();
-                dot.y += dot.speed;
-                if(dot.y > canvas.height) {
-                    dot.y = 0;
-                    dot.x = Math.random() * canvas.width;
+            // 1. Draw Starfield Background Parallax Layers
+            stars.forEach(star => {
+                ctx.fillStyle = star.color;
+                ctx.globalAlpha = 0.4;
+                ctx.fillRect(star.x, star.y, star.size, star.size);
+                ctx.globalAlpha = 1.0;
+                star.y += star.speed;
+                if (star.y > GAME_HEIGHT) {
+                    star.y = 0;
+                    star.x = Math.random() * GAME_WIDTH;
                 }
             });
 
-            // Handle Character Math and Drawing
-            player.update();
-            player.draw();
+            if (!gameActive) {
+                // Splash Opening Sequence Screen
+                drawPremiumOverlay("NEON OVERDRIVE", "Swipe screen to deploy and fly", varColor('--neon-cyan'));
+            } else if (gameOver) {
+                // Post-Session Dashboard UI Screen
+                drawPremiumOverlay("SYSTEM CRASH", `FINAL SCORE: ${score}`, varColor('--neon-pink'), "TAP TO REBOOT");
+            } else {
+                // ACTIVE RUNTIME MODULES ENGINE
+                frameCount++;
 
-            // Spawn rate generator
-            frameCount++;
-            if (frameCount % 65 === 0) {
-                aliens.push(new Alien());
-            }
+                // Track Spaceship Logic
+                player.update();
+                player.draw();
 
-            // Clean & Move Shots
-            for (let i = stars.length - 1; i >= 0; i--) {
-                stars[i].update();
-                stars[i].draw();
-                if (stars[i].y < -20) {
-                    stars.splice(i, 1);
+                // Manage Autofire Lasers
+                for (let i = lasers.length - 1; i >= 0; i--) {
+                    lasers[i].y -= CONFIG.laserSpeed;
+                    
+                    // Render modern glowing beam style shots
+                    ctx.save();
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = varColor('--neon-cyan');
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(lasers[i].x - 2, lasers[i].y, 4, 16);
+                    ctx.restore();
+
+                    if (lasers[i].y < -20) lasers.splice(i, 1);
                 }
-            }
 
-            // Collision Engines & Bound Checks
-            for (let i = aliens.length - 1; i >= 0; i--) {
-                aliens[i].update();
-                aliens[i].draw();
-
-                // Hit detection on Player
-                if (checkCollision(player, aliens[i], 32)) {
-                    endGame("Oh no! An alien bumped your rocket!");
-                    return;
+                // Wave Generator Module
+                if (frameCount % CONFIG.enemySpawnRate === 0) {
+                    enemies.push(new Enemy());
                 }
 
-                // Laser Star collision checking
-                let alienRemoved = false;
-                for (let j = stars.length - 1; j >= 0; j--) {
-                    if (checkCollision(aliens[i], stars[j], 28)) {
-                        score += 10;
-                        stars.splice(j, 1);
-                        aliens.splice(i, 1);
-                        alienRemoved = true;
-                        break;
+                // Process Active Interceptors & Hazard Arrays
+                for (let i = enemies.length - 1; i >= 0; i--) {
+                    enemies[i].update();
+                    enemies[i].draw();
+
+                    // Boundary leak failure configuration
+                    if (enemies[i].y > GAME_HEIGHT + 30) {
+                        gameOver = true;
+                        createExplosion(enemies[i].x, GAME_HEIGHT - 20, varColor('--neon-pink'));
+                        enemies.splice(i, 1);
+                        continue;
+                    }
+
+                    // Direct Ship Collision Engine 
+                    const distToPlayerX = Math.abs(enemies[i].x - player.x);
+                    const distToPlayerY = Math.abs(enemies[i].y - player.y);
+                    if (distToPlayerX < 32 && distToPlayerY < 32) {
+                        gameOver = true;
+                        createExplosion(player.x, player.y, varColor('--neon-cyan'));
+                        createExplosion(enemies[i].x, enemies[i].y, varColor('--neon-pink'));
+                        enemies.splice(i, 1);
+                        continue;
+                    }
+
+                    // Bullet Intercept Detection
+                    for (let j = lasers.length - 1; j >= 0; j--) {
+                        const dx = Math.abs(enemies[i].x - lasers[j].x);
+                        const dy = Math.abs(enemies[i].y - lasers[j].y);
+
+                        if (dx < 24 && dy < 24) {
+                            score += 10;
+                            scoreDisplay.innerText = `SCORE: ${score}`;
+                            
+                            // Emit hit tracking notifications and visual shards
+                            floatingTexts.push(new FloatingText(enemies[i].x, enemies[i].y, "+10", varColor('--neon-cyan')));
+                            createExplosion(enemies[i].x, enemies[i].y, varColor('--neon-pink'));
+                            
+                            enemies.splice(i, 1);
+                            lasers.splice(j, 1);
+                            break;
+                        }
                     }
                 }
-
-                // Bottom Boundary Check
-                if (!alienRemoved && aliens[i].y > canvas.height + 20) {
-                    endGame("Oops! An alien floated past!");
-                    return;
-                }
             }
 
-            // Draw Score Counter Panel
-            ctx.fillStyle = '#66fcf1';
-            ctx.font = 'bold 22px "Comic Sans MS"';
-            ctx.textAlign = 'left';
-            ctx.fillText(`Score: ${score}`, 20, 35);
+            // 2. Render Premium Particle FX Layers Over Objects
+            for (let i = particles.length - 1; i >= 0; i--) {
+                particles[i].update();
+                particles[i].draw();
+                if (particles[i].alpha <= 0) particles.splice(i, 1);
+            }
 
-            requestAnimationFrame(gameLoop);
+            // 3. Float Score Indicators
+            for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                floatingTexts[i].update();
+                floatingTexts[i].draw();
+                if (floatingTexts[i].alpha <= 0) floatingTexts.splice(i, 1);
+            }
+
+            ctx.restore();
+            requestAnimationFrame(loop);
         }
 
-        // Mobile Friendly End Screen Layout
-        function endGame(message) {
-            gameOver = true;
-            
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            ctx.fillStyle = 'white';
+        // Modular UI Layout Constructor
+        function drawPremiumOverlay(title, subtitle, accentColor, subAction = "") {
+            ctx.save();
             ctx.textAlign = 'center';
             
-            ctx.font = 'bold 38px "Comic Sans MS"';
-            ctx.fillText("Game Over!", canvas.width / 2, canvas.height / 2 - 50);
-            
-            ctx.fillStyle = '#ffc107';
-            ctx.font = '20px "Comic Sans MS"';
-            // Wraps short text strings nicely
-            ctx.fillText(message, canvas.width / 2, canvas.height / 2);
-            
-            ctx.fillStyle = 'white';
-            ctx.font = 'bold 26px "Comic Sans MS"';
-            ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 50);
-            
-            ctx.fillStyle = '#66fcf1';
-            ctx.font = '18px "Comic Sans MS"';
-            ctx.fillText("Tap the game screen to try again! 🎮", canvas.width / 2, canvas.height / 2 + 110);
+            // Clean semi-opaque cyberpunk dashboard overlay
+            ctx.fillStyle = 'rgba(6, 6, 12, 0.75)';
+            ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+            // Title Vector Drawing
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = accentColor;
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '900 36px system-ui';
+            ctx.fillText(title, GAME_WIDTH / 2, GAME_HEIGHT / 2 - 40);
+
+            // Subtitle Context Layout
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.font = '600 16px system-ui';
+            ctx.fillText(subtitle, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 15);
+
+            // Menu Secondary Action Trigger Notice
+            if(subAction !== "") {
+                ctx.fillStyle = accentColor;
+                ctx.font = '800 14px system-ui';
+                ctx.fillText(subAction, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 75);
+            }
+
+            ctx.restore();
         }
 
-        // Core Launch initialization
-        gameLoop();
+        // Start Core Graphics Pipeline
+        loop();
     </script>
 </body>
 </html>
