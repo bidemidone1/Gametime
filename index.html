@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kid Friendly Space Shooter</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Kid Friendly Space Shooter - Mobile Edition</title>
     <style>
         body {
             margin: 0;
@@ -14,31 +14,72 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            height: 100vh;
+            justify-content: flex-start;
+            min-height: 100vh;
             overflow: hidden;
+            /* Prevents long-press menus and selecting text on mobile */
             user-select: none;
+            -webkit-user-select: none;
+            touch-action: none; 
         }
         h1 {
             color: #66fcf1;
-            margin-bottom: 10px;
+            margin: 10px 0 5px 0;
+            font-size: 24px;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
         }
+        /* Responsive Canvas scaling for mobile screens */
         canvas {
             background-color: #1f2833;
-            border: 6px solid #45a29e;
-            border-radius: 15px;
-            box-shadow: 0 0 20px #66fcf1;
+            border: 4px solid #45a29e;
+            border-radius: 12px;
+            box-shadow: 0 0 15px #66fcf1;
+            max-width: 92vw;
+            max-height: 55vh;
+            width: 100%;
+            height: auto;
+            aspect-ratio: 500 / 600;
         }
-        #instructions {
+        /* Mobile Gamepad Touch Controls Layout */
+        #mobileControls {
+            display: flex;
+            width: 95vw;
+            max-width: 500px;
+            justify-content: space-between;
             margin-top: 15px;
-            font-size: 20px;
-            color: #c5c6c7;
-            text-align: center;
+            padding-bottom: 20px;
         }
-        .highlight {
-            color: #ffc107;
+        .control-btn {
+            background-color: #45a29e;
+            color: white;
+            border: 3px solid #66fcf1;
+            border-radius: 15px;
+            font-size: 32px;
             font-weight: bold;
+            padding: 15px 0;
+            text-align: center;
+            box-shadow: 0 6px #1f2833;
+            touch-action: manipulation;
+            transition: all 0.05s ease;
+        }
+        /* Visual feedback when kid taps the buttons */
+        .control-btn:active {
+            background-color: #66fcf1;
+            color: #0b0c10;
+            transform: translateY(4px);
+            box-shadow: 0 2px #1f2833;
+        }
+        #btnLeft, #btnRight {
+            width: 28%;
+        }
+        #btnFire {
+            width: 38%;
+            background-color: #ffc107;
+            border-color: #ffe082;
+            font-size: 24px;
+        }
+        #btnFire:active {
+            background-color: #ffe082;
         }
     </style>
 </head>
@@ -46,9 +87,11 @@
 
     <h1>🚀 Star Defender! 🚀</h1>
     <canvas id="gameCanvas" width="500" height="600"></canvas>
-    <div id="instructions">
-        Use <span class="highlight">Arrow Keys (◀ ▶)</span> to move.<br>
-        Press <span class="highlight">Spacebar</span> to shoot stars! 🌟
+    
+    <div id="mobileControls">
+        <button id="btnLeft" class="control-btn">◀</button>
+        <button id="btnFire" class="control-btn">🌟 FIRE</button>
+        <button id="btnRight" class="control-btn">▶</button>
     </div>
 
     <script>
@@ -60,20 +103,19 @@
         let gameOver = false;
         let frameCount = 0;
 
-        // Input Handling
+        // Input Tracking States
         const keys = {
             ArrowLeft: false,
             ArrowRight: false,
             Space: false
         };
 
+        // --- DESKTOP KEYBOARD CONTROLS ---
         window.addEventListener('keydown', (e) => {
             if (e.code === 'ArrowLeft') keys.ArrowLeft = true;
             if (e.code === 'ArrowRight') keys.ArrowRight = true;
             if (e.code === 'Space') keys.Space = true;
-            
-            // Prevent spacebar from scrolling the page
-            if(e.code === 'Space') e.preventDefault();
+            if (e.code === 'Space') e.preventDefault();
         });
 
         window.addEventListener('keyup', (e) => {
@@ -82,17 +124,38 @@
             if (e.code === 'Space') keys.Space = false;
         });
 
-        // Click to restart if game over
+        // --- MOBILE TOUCH CONTROLS ---
+        const btnLeft = document.getElementById('btnLeft');
+        const btnRight = document.getElementById('btnRight');
+        const btnFire = document.getElementById('btnFire');
+
+        // Left Button Events
+        btnLeft.addEventListener('touchstart', (e) => { e.preventDefault(); keys.ArrowLeft = true; });
+        btnLeft.addEventListener('touchend', (e) => { e.preventDefault(); keys.ArrowLeft = false; });
+        
+        // Right Button Events
+        btnRight.addEventListener('touchstart', (e) => { e.preventDefault(); keys.ArrowRight = true; });
+        btnRight.addEventListener('touchend', (e) => { e.preventDefault(); keys.ArrowRight = false; });
+
+        // Fire Button Events
+        btnFire.addEventListener('touchstart', (e) => { e.preventDefault(); keys.Space = true; });
+        btnFire.addEventListener('touchend', (e) => { e.preventDefault(); keys.Space = false; });
+
+        // Touch Canvas to Restart when Game Over
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (gameOver) resetGame();
+        });
         canvas.addEventListener('click', () => {
             if (gameOver) resetGame();
         });
 
-        // Player Object
+        // Player Object Setup
         const player = {
             x: canvas.width / 2,
             y: canvas.height - 50,
             size: 40,
-            speed: 5,
+            speed: 6, // Slightly faster movement for snappy mobile feel
             cooldown: 0,
             draw() {
                 ctx.font = `${this.size}px Arial`;
@@ -104,22 +167,22 @@
                 if (keys.ArrowLeft && this.x > this.size / 2) this.x -= this.speed;
                 if (keys.ArrowRight && this.x < canvas.width - this.size / 2) this.x += this.speed;
                 
-                // Shooting mechanism with cooldown so kids can't spam too fast
+                // Continuous shooting if button is held down, with a friendly cooldown rate
                 if (keys.Space && this.cooldown <= 0) {
                     stars.push(new Star(this.x, this.y - 20));
-                    this.cooldown = 15; // Wait 15 frames before next shot
+                    this.cooldown = 12; 
                 }
                 if (this.cooldown > 0) this.cooldown--;
             }
         };
 
-        // Arrays to hold moving objects
+        // Arrays to manage entities
         let stars = [];
         let aliens = [];
         let backgroundDots = [];
 
-        // Generate background space dots
-        for(let i = 0; i < 50; i++) {
+        // Build Twinkling Background
+        for(let i = 0; i < 40; i++) {
             backgroundDots.push({
                 x: Math.random() * canvas.width,
                 y: Math.random() * canvas.height,
@@ -128,13 +191,13 @@
             });
         }
 
-        // Star (Projectile) Class
+        // Projectile Class (Star Power-ups)
         class Star {
             constructor(x, y) {
                 this.x = x;
                 this.y = y;
-                this.size = 20;
-                this.speed = 7;
+                this.size = 22;
+                this.speed = 8;
             }
             draw() {
                 ctx.font = `${this.size}px Arial`;
@@ -145,13 +208,14 @@
             }
         }
 
-        // Alien (Enemy) Class
+        // Enemy Class (Silly Space Aliens)
         class Alien {
             constructor() {
                 this.size = 35;
                 this.x = Math.random() * (canvas.width - this.size * 2) + this.size;
                 this.y = -30;
-                this.speed = Math.random() * 2 + 1.5; // Slow, kid-friendly speed
+                // Perfect slower speed adjustments for kids playing on touch screens
+                this.speed = Math.random() * 1.5 + 1.5; 
             }
             draw() {
                 ctx.font = `${this.size}px Arial`;
@@ -162,33 +226,35 @@
             }
         }
 
-        // Collision Detection (Distance based)
+        // Circular Collision Math Helper
         function checkCollision(obj1, obj2, distanceThreshold) {
             const dx = obj1.x - obj2.x;
             const dy = obj1.y - obj2.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            return distance < distanceThreshold;
+            return Math.sqrt(dx * dx + dy * dy) < distanceThreshold;
         }
 
-        // Reset the game
+        // Refresh/Restart state cleaner
         function resetGame() {
             score = 0;
             gameOver = false;
             stars = [];
             aliens = [];
             player.x = canvas.width / 2;
+            // Clear keys in case touch got stuck on reset
+            keys.ArrowLeft = false;
+            keys.ArrowRight = false;
+            keys.Space = false;
             gameLoop();
         }
 
-        // Main Game Loop
+        // Engine Loop Function
         function gameLoop() {
             if (gameOver) return;
 
-            // Clear the canvas
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Draw and update moving background
-            ctx.fillStyle = 'white';
+            // Draw Background Stars
+            ctx.fillStyle = '#ffffff';
             backgroundDots.forEach(dot => {
                 ctx.beginPath();
                 ctx.arc(dot.x, dot.y, dot.radius, 0, Math.PI * 2);
@@ -200,96 +266,92 @@
                 }
             });
 
-            // Update and draw player
+            // Handle Character Math and Drawing
             player.update();
             player.draw();
 
-            // Spawn Aliens slowly (every 60 frames roughly 1 second)
+            // Spawn rate generator
             frameCount++;
-            if (frameCount % 60 === 0) {
+            if (frameCount % 65 === 0) {
                 aliens.push(new Alien());
             }
 
-            // Update and draw stars (projectiles)
+            // Clean & Move Shots
             for (let i = stars.length - 1; i >= 0; i--) {
                 stars[i].update();
                 stars[i].draw();
-
-                // Remove if off screen
                 if (stars[i].y < -20) {
                     stars.splice(i, 1);
                 }
             }
 
-            // Update and draw aliens
+            // Collision Engines & Bound Checks
             for (let i = aliens.length - 1; i >= 0; i--) {
                 aliens[i].update();
                 aliens[i].draw();
 
-                // Check collision with player
-                if (checkCollision(player, aliens[i], 30)) {
-                    endGame("Oh no! The alien bumped you!");
+                // Hit detection on Player
+                if (checkCollision(player, aliens[i], 32)) {
+                    endGame("Oh no! An alien bumped your rocket!");
                     return;
                 }
 
-                // Check collision with stars
+                // Laser Star collision checking
                 let alienRemoved = false;
                 for (let j = stars.length - 1; j >= 0; j--) {
-                    if (checkCollision(aliens[i], stars[j], 25)) {
+                    if (checkCollision(aliens[i], stars[j], 28)) {
                         score += 10;
-                        stars.splice(j, 1); // Remove star
-                        aliens.splice(i, 1); // Remove alien
+                        stars.splice(j, 1);
+                        aliens.splice(i, 1);
                         alienRemoved = true;
                         break;
                     }
                 }
 
-                // Check if alien passed the screen
+                // Bottom Boundary Check
                 if (!alienRemoved && aliens[i].y > canvas.height + 20) {
-                    endGame("Oops! An alien snuck past!");
+                    endGame("Oops! An alien floated past!");
                     return;
                 }
             }
 
-            // Draw Score
+            // Draw Score Counter Panel
             ctx.fillStyle = '#66fcf1';
-            ctx.font = '24px "Comic Sans MS"';
+            ctx.font = 'bold 22px "Comic Sans MS"';
             ctx.textAlign = 'left';
-            ctx.fillText(`Score: ${score}`, 20, 30);
+            ctx.fillText(`Score: ${score}`, 20, 35);
 
-            // Loop
             requestAnimationFrame(gameLoop);
         }
 
-        // Game Over Screen
+        // Mobile Friendly End Screen Layout
         function endGame(message) {
             gameOver = true;
             
-            // Semi-transparent overlay
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Game over text
             ctx.fillStyle = 'white';
             ctx.textAlign = 'center';
             
-            ctx.font = 'bold 40px "Comic Sans MS"';
-            ctx.fillText("Game Over!", canvas.width / 2, canvas.height / 2 - 40);
+            ctx.font = 'bold 38px "Comic Sans MS"';
+            ctx.fillText("Game Over!", canvas.width / 2, canvas.height / 2 - 50);
             
             ctx.fillStyle = '#ffc107';
             ctx.font = '20px "Comic Sans MS"';
+            // Wraps short text strings nicely
             ctx.fillText(message, canvas.width / 2, canvas.height / 2);
             
             ctx.fillStyle = 'white';
-            ctx.font = '24px "Comic Sans MS"';
+            ctx.font = 'bold 26px "Comic Sans MS"';
             ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 50);
             
             ctx.fillStyle = '#66fcf1';
             ctx.font = '18px "Comic Sans MS"';
-            ctx.fillText("Click the game box to play again! 🎮", canvas.width / 2, canvas.height / 2 + 100);
+            ctx.fillText("Tap the game screen to try again! 🎮", canvas.width / 2, canvas.height / 2 + 110);
         }
 
-        // Start the game
+        // Core Launch initialization
         gameLoop();
     </script>
 </body>
