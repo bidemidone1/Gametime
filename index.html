@@ -45,6 +45,7 @@
             width: 100%;
             height: 100%;
             display: block;
+            object-fit: contain; /* FIX: Prevents stretching on modern tall phones */
         }
         /* Sleek minimalist HUD overlays */
         .hud-element {
@@ -53,13 +54,22 @@
             font-weight: 800;
             text-transform: uppercase;
             letter-spacing: 2px;
+            z-index: 10;
         }
         #score-display {
             top: 25px;
             left: 25px;
-            font-size: 24px;
+            font-size: 20px;
             color: var(--neon-cyan);
             text-shadow: 0 0 10px rgba(0, 243, 255, 0.5);
+        }
+        #level-display {
+            top: 25px;
+            right: 25px;
+            font-size: 20px;
+            color: var(--neon-pink);
+            text-shadow: 0 0 10px rgba(255, 0, 127, 0.5);
+            text-align: right;
         }
         #hint-display {
             bottom: 30px;
@@ -80,6 +90,7 @@
 
     <div id="game-container">
         <div id="score-display" class="hud-element">SCORE: 0</div>
+        <div id="level-display" class="hud-element">LVL: 1</div>
         <div id="hint-display" class="hud-element">Drag / Swipe anywhere to fly • Autofire Active</div>
         <canvas id="arcadeCanvas"></canvas>
     </div>
@@ -88,6 +99,7 @@
         const canvas = document.getElementById('arcadeCanvas');
         const ctx = canvas.getContext('2d');
         const scoreDisplay = document.getElementById('score-display');
+        const levelDisplay = document.getElementById('level-display');
 
         // Force high-resolution internal canvas dimensions for crisp graphics
         const GAME_WIDTH = 450;
@@ -97,6 +109,8 @@
 
         // Global Game States
         let score = 0;
+        let level = 1;
+        const MAX_LEVEL = 1000;
         let gameOver = false;
         let gameActive = false;
         let frameCount = 0;
@@ -111,11 +125,9 @@
 
         // Engine / Tuning Parameters
         const CONFIG = {
-            playerSpeedLerp: 0.18, // Smoothness of finger tracking (lower = floatier, higher = sharper)
-            laserSpeed: 14,
-            fireRate: 9,          // Auto-fires every X frames
-            enemySpawnRate: 50,    // Spawns enemy every X frames
-            baseEnemySpeed: 2.5
+            playerSpeedLerp: 0.2, // Slightly snappier controls
+            laserSpeed: 16,       // Faster lasers
+            fireRate: 7,          // Faster autofire for easier play (lower is faster)
         };
 
         // Initialize Background Parallax Starfield
@@ -163,24 +175,27 @@
 
         // Floating Damage/Score Text Numbers
         class FloatingText {
-            constructor(x, y, text, color) {
+            constructor(x, y, text, color, isLarge = false) {
                 this.x = x;
                 this.y = y;
                 this.text = text;
                 this.color = color;
                 this.alpha = 1;
                 this.vy = -1.5;
+                this.isLarge = isLarge;
             }
             update() {
                 this.y += this.vy;
-                this.alpha -= 0.025;
+                this.alpha -= this.isLarge ? 0.015 : 0.025; // Large text fades slower
             }
             draw() {
                 ctx.save();
                 ctx.globalAlpha = this.alpha;
-                ctx.font = 'bold 16px system-ui';
+                ctx.font = this.isLarge ? '900 24px system-ui' : 'bold 16px system-ui';
                 ctx.fillStyle = this.color;
                 ctx.textAlign = 'center';
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = this.color;
                 ctx.fillText(this.text, this.x, this.y);
                 ctx.restore();
             }
@@ -217,7 +232,6 @@
 
                 // PREMIUM AUTOFIRE TRIGGER ENGINE
                 if (gameActive && !gameOver && frameCount % CONFIG.fireRate === 0) {
-                    // Twin Barrels Setup
                     lasers.push({ x: this.x - 14, y: this.y - 15 });
                     lasers.push({ x: this.x + 14, y: this.y - 15 });
                 }
@@ -275,12 +289,15 @@
                 this.height = 32;
                 this.x = Math.random() * (GAME_WIDTH - 80) + 40;
                 this.y = -40;
-                this.speed = CONFIG.baseEnemySpeed + Math.random() * 2;
+                
+                // DIFFICULTY SCALING: Speed slowly increases with level
+                let speedCap = 1.2 + (level * 0.005);
+                this.speed = speedCap + Math.random(); 
+                
                 this.pulseFactor = Math.random() * 10;
             }
             update() {
                 this.y += this.speed;
-                // Elegant soft wave floating path mechanics
                 this.x += Math.sin((frameCount + this.pulseFactor) * 0.04) * 0.8;
             }
             draw() {
@@ -295,11 +312,11 @@
 
                 // Modern Geometric Aggressive Polygon Grid Shapes
                 ctx.beginPath();
-                ctx.moveTo(0, 16);          // Spike nose pointing down
-                ctx.lineTo(18, -12);        // Wing right
-                ctx.lineTo(8, -16);         // Inner right intake
-                ctx.lineTo(-8, -16);        // Inner left intake
-                ctx.lineTo(-18, -12);       // Wing left
+                ctx.moveTo(0, 16);          
+                ctx.lineTo(18, -12);        
+                ctx.lineTo(8, -16);         
+                ctx.lineTo(-8, -16);        
+                ctx.lineTo(-18, -12);       
                 ctx.closePath();
                 ctx.fill();
                 ctx.stroke();
@@ -314,12 +331,10 @@
             }
         }
 
-        // Unified Root Hex/CSS Utility Reader
         function varColor(name) {
             return name === '--neon-cyan' ? '#00f3ff' : '#ff007f';
         }
 
-        // Core Coordinate Mapper for Touch & Drags
         function updateTargetFromTouch(e) {
             if (gameOver) return;
             if (!gameActive) gameActive = true;
@@ -327,16 +342,13 @@
             const rect = canvas.getBoundingClientRect();
             const touch = e.touches[0];
             
-            // Scaled dynamic mapping to isolate exact finger positioning
             const touchX = (touch.clientX - rect.left) * (GAME_WIDTH / rect.width);
             const touchY = (touch.clientY - rect.top) * (GAME_HEIGHT / rect.height);
             
-            // Set dynamic positional offsets
             player.targetX = touchX;
-            player.targetY = touchY - 40; // Safely offsets the player's view context above the finger line
+            player.targetY = touchY - 40; 
         }
 
-        // Event Control Rigging
         window.addEventListener('touchstart', (e) => {
             if(gameOver) {
                 resetGame();
@@ -352,20 +364,20 @@
             e.preventDefault();
         }, { passive: false });
 
-        // Desktop Fallback Dev Listener Mouse Engine
         canvas.addEventListener('mousemove', (e) => {
             if (!gameActive || gameOver) return;
             const rect = canvas.getBoundingClientRect();
             player.targetX = (e.clientX - rect.left) * (GAME_WIDTH / rect.width);
             player.targetY = (e.clientY - rect.top) * (GAME_HEIGHT / rect.height) - 40;
         });
+        
         canvas.addEventListener('click', () => {
             if (!gameActive) gameActive = true;
             if (gameOver) resetGame();
         });
 
         function createExplosion(x, y, color) {
-            screenShake = 12; // Trigger UI bounce vibration context
+            screenShake = 12; 
             for (let i = 0; i < 15; i++) {
                 particles.push(new Particle(x, y, color));
             }
@@ -373,7 +385,9 @@
 
         function resetGame() {
             score = 0;
+            level = 1;
             scoreDisplay.innerText = "SCORE: 0";
+            levelDisplay.innerText = "LVL: 1";
             gameOver = false;
             gameActive = true;
             lasers = [];
@@ -389,18 +403,18 @@
 
         // Primary High-Performance Render Loop Architecture
         function loop() {
+            // FIX: Clear Canvas BEFORE applying screen shake transforms
+            ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
             ctx.save();
             
-            // Screen Shake Transform Application Matrix
             if (screenShake > 0) {
                 const dx = (Math.random() - 0.5) * screenShake;
                 const dy = (Math.random() - 0.5) * screenShake;
                 ctx.translate(dx, dy);
-                screenShake *= 0.85; // Natural vibration decay envelope
+                screenShake *= 0.85; 
                 if(screenShake < 0.5) screenShake = 0;
             }
-
-            ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
             // 1. Draw Starfield Background Parallax Layers
             stars.forEach(star => {
@@ -416,16 +430,12 @@
             });
 
             if (!gameActive) {
-                // Splash Opening Sequence Screen
-                drawPremiumOverlay("NEON OVERDRIVE", "Swipe screen to deploy and fly", varColor('--neon-cyan'));
+                drawPremiumOverlay("NEON OVERDRIVE", "Swipe screen to deploy", varColor('--neon-cyan'));
             } else if (gameOver) {
-                // Post-Session Dashboard UI Screen
-                drawPremiumOverlay("SYSTEM CRASH", `FINAL SCORE: ${score}`, varColor('--neon-pink'), "TAP TO REBOOT");
+                drawPremiumOverlay("SYSTEM CRASH", `LVL: ${level} | SCORE: ${score}`, varColor('--neon-pink'), "TAP TO REBOOT");
             } else {
-                // ACTIVE RUNTIME MODULES ENGINE
                 frameCount++;
 
-                // Track Spaceship Logic
                 player.update();
                 player.draw();
 
@@ -433,7 +443,6 @@
                 for (let i = lasers.length - 1; i >= 0; i--) {
                     lasers[i].y -= CONFIG.laserSpeed;
                     
-                    // Render modern glowing beam style shots
                     ctx.save();
                     ctx.shadowBlur = 10;
                     ctx.shadowColor = varColor('--neon-cyan');
@@ -444,8 +453,11 @@
                     if (lasers[i].y < -20) lasers.splice(i, 1);
                 }
 
-                // Wave Generator Module
-                if (frameCount % CONFIG.enemySpawnRate === 0) {
+                // DIFFICULTY SCALING: Spawn rate calculation based on Level
+                // Starts at 65 frames (slow), caps at 20 frames (fast) at very high levels
+                let currentSpawnRate = Math.max(20, 65 - Math.floor(level * 0.04));
+                
+                if (frameCount % currentSpawnRate === 0) {
                     enemies.push(new Enemy());
                 }
 
@@ -462,10 +474,10 @@
                         continue;
                     }
 
-                    // Direct Ship Collision Engine 
+                    // Direct Ship Collision Engine (Hitbox slightly forgiving for easier play)
                     const distToPlayerX = Math.abs(enemies[i].x - player.x);
                     const distToPlayerY = Math.abs(enemies[i].y - player.y);
-                    if (distToPlayerX < 32 && distToPlayerY < 32) {
+                    if (distToPlayerX < 28 && distToPlayerY < 28) {
                         gameOver = true;
                         createExplosion(player.x, player.y, varColor('--neon-cyan'));
                         createExplosion(enemies[i].x, enemies[i].y, varColor('--neon-pink'));
@@ -478,11 +490,20 @@
                         const dx = Math.abs(enemies[i].x - lasers[j].x);
                         const dy = Math.abs(enemies[i].y - lasers[j].y);
 
-                        if (dx < 24 && dy < 24) {
+                        if (dx < 26 && dy < 26) {
+                            // Hit confirmed
                             score += 10;
+                            
+                            // LEVEL UP LOGIC (1 level per 100 score)
+                            let newLevel = Math.min(MAX_LEVEL, Math.floor(score / 100) + 1);
+                            if (newLevel > level) {
+                                level = newLevel;
+                                levelDisplay.innerText = `LVL: ${level}`;
+                                floatingTexts.push(new FloatingText(GAME_WIDTH/2, GAME_HEIGHT/2 - 80, `LEVEL ${level}`, varColor('--neon-cyan'), true));
+                            }
+
                             scoreDisplay.innerText = `SCORE: ${score}`;
                             
-                            // Emit hit tracking notifications and visual shards
                             floatingTexts.push(new FloatingText(enemies[i].x, enemies[i].y, "+10", varColor('--neon-cyan')));
                             createExplosion(enemies[i].x, enemies[i].y, varColor('--neon-pink'));
                             
@@ -501,7 +522,7 @@
                 if (particles[i].alpha <= 0) particles.splice(i, 1);
             }
 
-            // 3. Float Score Indicators
+            // 3. Float Score/Level Indicators
             for (let i = floatingTexts.length - 1; i >= 0; i--) {
                 floatingTexts[i].update();
                 floatingTexts[i].draw();
@@ -512,29 +533,24 @@
             requestAnimationFrame(loop);
         }
 
-        // Modular UI Layout Constructor
         function drawPremiumOverlay(title, subtitle, accentColor, subAction = "") {
             ctx.save();
             ctx.textAlign = 'center';
             
-            // Clean semi-opaque cyberpunk dashboard overlay
             ctx.fillStyle = 'rgba(6, 6, 12, 0.75)';
             ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-            // Title Vector Drawing
             ctx.shadowBlur = 20;
             ctx.shadowColor = accentColor;
             ctx.fillStyle = '#ffffff';
             ctx.font = '900 36px system-ui';
             ctx.fillText(title, GAME_WIDTH / 2, GAME_HEIGHT / 2 - 40);
 
-            // Subtitle Context Layout
             ctx.shadowBlur = 0;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
             ctx.font = '600 16px system-ui';
             ctx.fillText(subtitle, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 15);
 
-            // Menu Secondary Action Trigger Notice
             if(subAction !== "") {
                 ctx.fillStyle = accentColor;
                 ctx.font = '800 14px system-ui';
@@ -544,7 +560,6 @@
             ctx.restore();
         }
 
-        // Start Core Graphics Pipeline
         loop();
     </script>
 </body>
